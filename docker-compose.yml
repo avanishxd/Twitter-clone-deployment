@@ -1,0 +1,36 @@
+version: "3.9"
+services:
+  mongo:
+    image: mongo:6
+    restart: always
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - appnet
+
+  server:
+    build: ./server
+    env_file:
+      - ./server/.env
+    ports:
+      - "3001:3001"
+    depends_on:
+      - mongo
+    networks:
+      - appnet
+
+  client:
+    build: ./client
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    networks:
+      - appnet
+
+volumes:
+  mongo-data:
+
+networks:
+  appnet:
+    driver: bridge
