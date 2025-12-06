@@ -1,13 +1,12 @@
-FROM node:18-alpine
+FROM node:18
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install --production
+RUN npm install --legacy-peer-deps
 
 COPY . .
 
-ENV NODE_ENV=production
 EXPOSE 3001
 
-CMD ["node", "src/index.js"]
+CMD ["npm", "start"]
