@@ -6,6 +6,10 @@ def COLOR_MAP = [
 pipeline {
     agent any
 
+    tools {
+    nodejs 'node18'
+    }
+    
     environment {
         scannerHome     = tool 'sonar6.2'
         SONAR_SERVER    = 'SonarQube'
