@@ -70,19 +70,20 @@ pipeline {
          * STEP 5: SONAR CODE SCAN
          ******************************************/
         stage('Sonar Code Analysis') {
-            steps {
-                withSonarQubeEnv(SONAR_SERVER) {
-                    sh """
-                        ${scannerHome}/bin/sonar-scanner \
-                            -Dsonar.projectKey=twitterclone \
-                            -Dsonar.projectName=twitterclone \
-                            -Dsonar.projectVersion=${BUILD_NUMBER} \
-                            -Dsonar.sources=server,client \
-                            -Dsonar.host.url=http://192.168.1.109:9000
-                    """
-                }
-            }
+    steps {
+        withSonarQubeEnv('SonarQube') {
+            sh """
+                ${scannerHome}/bin/sonar-scanner \
+                    -Dsonar.projectKey=twitterclone \
+                    -Dsonar.projectName=twitterclone \
+                    -Dsonar.projectVersion=${BUILD_NUMBER} \
+                    -Dsonar.sources=server,client \
+                    -Dsonar.host.url=http://192.168.1.109:9000
+            """
         }
+    }
+}
+
 
         /******************************************
          * STEP 6: WAIT FOR SONAR QUALITY GATE
