@@ -13,18 +13,23 @@ pipeline {
         DOCKER_REGISTRY = '192.168.1.51:8083'
         NEXUS_CREDS     = 'nexuslogin'
         APP_NAME        = 'twitter-clone'
-
         DEPLOY_PATH     = '/var/www/twitter-clone'
     }
 
     stages {
 
-        stage('Fetch Code') {
+        /******************************************
+         * STEP 1: GITHUB CHECKOUT (AUTO BY JENKINS)
+         ******************************************/
+        stage('SCM Checkout') {
             steps {
-                git branch: 'master', url: 'https://github.com/YOUR_USERNAME/Twitter-clone-deployment.git'
+                echo "Source code fetched automatically by Jenkins."
             }
         }
 
+        /******************************************
+         * STEP 2: BACKEND (SERVER) BUILD & TEST
+         ******************************************/
         stage('Install & Test Server') {
             steps {
                 dir('server') {
@@ -34,16 +39,20 @@ pipeline {
             }
         }
 
+        /******************************************
+         * STEP 3: SETUP CLIENT .env
+         ******************************************/
         stage('Set Client ENV') {
             steps {
                 dir('client') {
-                    sh """
-                        echo 'REACT_APP_API_URL=http://192.168.1.70:3001/api' > .env
-                    """
+                    sh "echo 'REACT_APP_API_URL=http://192.168.1.70:3001/api' > .env"
                 }
             }
         }
 
+        /******************************************
+         * STEP 4: FRONTEND (CLIENT) BUILD
+         ******************************************/
         stage('Install & Build Client') {
             steps {
                 dir('client') {
@@ -53,6 +62,9 @@ pipeline {
             }
         }
 
+        /******************************************
+         * STEP 5: SONAR CODE SCAN
+         ******************************************/
         stage('Sonar Code Analysis') {
             steps {
                 withSonarQubeEnv(SONAR_SERVER) {
@@ -62,14 +74,15 @@ pipeline {
                             -Dsonar.projectName=twitterclone \
                             -Dsonar.projectVersion=${BUILD_NUMBER} \
                             -Dsonar.sources=server,client \
-                            -Dsonar.javascript.lcov.reportPaths=server/coverage/lcov.info \
-                            -Dsonar.host.url=http://192.168.1.109:9000 \
-                            -Dsonar.login=$SONAR_AUTH_TOKEN
+                            -Dsonar.host.url=http://192.168.1.109:9000
                     """
                 }
             }
         }
 
+        /******************************************
+         * STEP 6: WAIT FOR SONAR QUALITY GATE
+         ******************************************/
         stage('Quality Gate') {
             steps {
                 timeout(time: 1, unit: 'HOURS') {
@@ -78,6 +91,9 @@ pipeline {
             }
         }
 
+        /******************************************
+         * STEP 7: DOCKER BUILD (SERVER + CLIENT)
+         ******************************************/
         stage('Build Docker Images') {
             steps {
                 sh """
@@ -87,6 +103,9 @@ pipeline {
             }
         }
 
+        /******************************************
+         * STEP 8: PUSH DOCKER IMAGES TO NEXUS
+         ******************************************/
         stage('Push Docker Images') {
             steps {
                 withCredentials([usernamePassword(credentialsId: NEXUS_CREDS, usernameVariable: 'U', passwordVariable: 'P')]) {
@@ -99,6 +118,9 @@ pipeline {
             }
         }
 
+        /******************************************
+         * STEP 9: DEPLOY APP THROUGH DOCKER-COMPOSE
+         ******************************************/
         stage('Deploy') {
             steps {
                 sh """
@@ -112,13 +134,16 @@ pipeline {
                     sed -i "s|image:.*server.*|image: ${DOCKER_REGISTRY}/${APP_NAME}-server:${BUILD_NUMBER}|" docker-compose.yml
                     sed -i "s|image:.*client.*|image: ${DOCKER_REGISTRY}/${APP_NAME}-client:${BUILD_NUMBER}|" docker-compose.yml
 
-                    docker compose down
+                    docker compose down || true
                     docker compose up -d
                 """
             }
         }
     }
 
+    /******************************************
+     * FINAL NOTIFICATION
+     ******************************************/
     post {
         always {
             echo "Pipeline finished: ${currentBuild.currentResult}"
