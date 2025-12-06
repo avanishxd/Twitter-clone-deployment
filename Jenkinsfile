@@ -48,19 +48,21 @@ EOF
          * STEP 3: SONAR CODE SCAN (on source only)
          ******************************************/
         stage('Sonar Code Analysis') {
-            steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh """
-                        ${scannerHome}/bin/sonar-scanner \
-                            -Dsonar.projectKey=twitterclone \
-                            -Dsonar.projectName=twitterclone \
-                            -Dsonar.projectVersion=${BUILD_NUMBER} \
-                            -Dsonar.sources=server,client \
-                            -Dsonar.host.url=http://192.168.1.109:9000
-                    """
-                }
-            }
+    steps {
+        withSonarQubeEnv('SonarQube') {
+            sh """
+                ${scannerHome}/bin/sonar-scanner \
+                    -Dsonar.projectKey=twitterclone \
+                    -Dsonar.projectName=twitterclone \
+                    -Dsonar.projectVersion=${BUILD_NUMBER} \
+                    -Dsonar.sources=server,client \
+                    -Dsonar.host.url=$SONAR_HOST_URL \
+                    -Dsonar.token=$SONAR_AUTH_TOKEN
+            """
         }
+    }
+}
+
 
         /******************************************
          * STEP 4: WAIT FOR SONAR QUALITY GATE
