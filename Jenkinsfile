@@ -6,10 +6,7 @@ def COLOR_MAP = [
 pipeline {
     agent any
 
-    tools {
-    nodejs 'node18'
-    }
-    
+    // No NodeJS tool needed now, Docker handles Node
     environment {
         scannerHome     = tool 'sonar6.2'
         SONAR_SERVER    = 'SonarQube'
@@ -28,65 +25,45 @@ pipeline {
         stage('SCM Checkout') {
             steps {
                 echo "Source code fetched automatically by Jenkins."
+                // Jenkins already checks out from your Git SCM config.
             }
         }
 
         /******************************************
-         * STEP 2: BACKEND (SERVER) BUILD & TEST
-         ******************************************/
-        stage('Install & Test Server') {
-            steps {
-                dir('server') {
-                    sh 'npm install'
-                    sh 'npm test || true'
-                }
-            }
-        }
-
-        /******************************************
-         * STEP 3: SETUP CLIENT .env
+         * STEP 2: SETUP CLIENT .env (for React)
          ******************************************/
         stage('Set Client ENV') {
             steps {
                 dir('client') {
-                    sh "echo 'REACT_APP_API_URL=http://192.168.1.70:3001/api' > .env"
+                    sh """
+                        cat > .env <<EOF
+REACT_APP_API_URL=http://192.168.1.70:3001/api
+EOF
+                    """
                 }
             }
         }
 
         /******************************************
-         * STEP 4: FRONTEND (CLIENT) BUILD
-         ******************************************/
-        stage('Install & Build Client') {
-            steps {
-                dir('client') {
-                    sh 'npm install'
-                    sh 'npm run build'
-                }
-            }
-        }
-
-        /******************************************
-         * STEP 5: SONAR CODE SCAN
+         * STEP 3: SONAR CODE SCAN (on source only)
          ******************************************/
         stage('Sonar Code Analysis') {
-    steps {
-        withSonarQubeEnv('SonarQube') {
-            sh """
-                ${scannerHome}/bin/sonar-scanner \
-                    -Dsonar.projectKey=twitterclone \
-                    -Dsonar.projectName=twitterclone \
-                    -Dsonar.projectVersion=${BUILD_NUMBER} \
-                    -Dsonar.sources=server,client \
-                    -Dsonar.host.url=http://192.168.1.109:9000
-            """
+            steps {
+                withSonarQubeEnv('SonarQube') {
+                    sh """
+                        ${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=twitterclone \
+                            -Dsonar.projectName=twitterclone \
+                            -Dsonar.projectVersion=${BUILD_NUMBER} \
+                            -Dsonar.sources=server,client \
+                            -Dsonar.host.url=http://192.168.1.109:9000
+                    """
+                }
+            }
         }
-    }
-}
-
 
         /******************************************
-         * STEP 6: WAIT FOR SONAR QUALITY GATE
+         * STEP 4: WAIT FOR SONAR QUALITY GATE
          ******************************************/
         stage('Quality Gate') {
             steps {
@@ -97,34 +74,41 @@ pipeline {
         }
 
         /******************************************
-         * STEP 7: DOCKER BUILD (SERVER + CLIENT)
+         * STEP 5: DOCKER BUILD (SERVER + CLIENT)
+         * All npm build happens INSIDE Docker now
          ******************************************/
         stage('Build Docker Images') {
             steps {
                 sh """
+                    # Build server image (Dockerfile in ./server)
                     docker build -t ${DOCKER_REGISTRY}/${APP_NAME}-server:${BUILD_NUMBER} ./server
+
+                    # Build client image (Dockerfile in ./client)
                     docker build -t ${DOCKER_REGISTRY}/${APP_NAME}-client:${BUILD_NUMBER} ./client
                 """
             }
         }
 
         /******************************************
-         * STEP 8: PUSH DOCKER IMAGES TO NEXUS
+         * STEP 6: PUSH DOCKER IMAGES TO NEXUS
          ******************************************/
         stage('Push Docker Images') {
             steps {
                 withCredentials([usernamePassword(credentialsId: NEXUS_CREDS, usernameVariable: 'U', passwordVariable: 'P')]) {
                     sh """
                         echo "$P" | docker login ${DOCKER_REGISTRY} -u "$U" --password-stdin
+
                         docker push ${DOCKER_REGISTRY}/${APP_NAME}-server:${BUILD_NUMBER}
                         docker push ${DOCKER_REGISTRY}/${APP_NAME}-client:${BUILD_NUMBER}
+
+                        docker logout ${DOCKER_REGISTRY}
                     """
                 }
             }
         }
 
         /******************************************
-         * STEP 9: DEPLOY APP THROUGH DOCKER-COMPOSE
+         * STEP 7: DEPLOY APP THROUGH DOCKER-COMPOSE
          ******************************************/
         stage('Deploy') {
             steps {
@@ -136,6 +120,7 @@ pipeline {
 
                     cd ${DEPLOY_PATH}
 
+                    # Update images in docker-compose.yml to use the new tags
                     sed -i "s|image:.*server.*|image: ${DOCKER_REGISTRY}/${APP_NAME}-server:${BUILD_NUMBER}|" docker-compose.yml
                     sed -i "s|image:.*client.*|image: ${DOCKER_REGISTRY}/${APP_NAME}-client:${BUILD_NUMBER}|" docker-compose.yml
 
@@ -146,9 +131,6 @@ pipeline {
         }
     }
 
-    /******************************************
-     * FINAL NOTIFICATION
-     ******************************************/
     post {
         always {
             echo "Pipeline finished: ${currentBuild.currentResult}"
