@@ -12,6 +12,8 @@ services:
   server:
     image: 192.168.1.51:8083/twitter-clone-server:latest
     restart: always
+    env_file:
+      - ./server/.env
     ports:
       - "3001:3001"
     depends_on:
