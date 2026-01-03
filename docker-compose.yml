@@ -10,24 +10,15 @@ services:
       - appnet
 
   server:
-    image: 192.168.1.51:8083/twitter-clone-server:latest
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: twitter-clone-server:latest
     restart: always
     env_file:
       - ./server/.env
-    ports:
-      - "3001:3001"
     depends_on:
       - mongo
-    networks:
-      - appnet
-
-  client:
-    image: 192.168.1.51:8083/twitter-clone-client:latest
-    restart: always
-    ports:
-      - "80:80"
-    depends_on:
-      - server
     networks:
       - appnet
 
@@ -37,3 +28,4 @@ volumes:
 networks:
   appnet:
     driver: bridge
+
